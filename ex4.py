@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
@@ -64,9 +66,9 @@ def validate(dataloader, model, loss_fn):
     return validate_loss, correct
 
 
-def data_loader_from_file():
-    train_x = np.loadtxt("train_x", dtype=float)
-    train_y = np.loadtxt("train_y", dtype=int)
+def data_loader_from_file(train_x,train_y):
+    train_x = np.loadtxt(train_x, dtype=float)
+    train_y = np.loadtxt(train_y, dtype=int)
     train_data = TensorDataset(torch.from_numpy(train_x).float(), torch.from_numpy(train_y).type(torch.LongTensor))
     train_size = int(0.8 * len(train_x))
     test_size = len(train_x) - train_size
@@ -179,7 +181,8 @@ def make_plot(plots_data, plot_title):
 
 
 def main():
-    train_loader, validate_loader = data_loader_from_file()
+    train_x, train_y, test_x, test_y = sys.argv[1:]
+    train_loader, validate_loader = data_loader_from_file(train_x,train_y)
 
     # run model A
     nn_sequential = nn.Sequential(
@@ -205,14 +208,15 @@ def main():
     nn_sequential = nn.Sequential(
         nn.Linear(28 * 28, 100),
         nn.ReLU(),
-        nn.Dropout(),
+        nn.Dropout(0.2),
         nn.Linear(100, 50),
         nn.ReLU(),
-        nn.Dropout(),
+        nn.Dropout(0.2),
         nn.Linear(50, 10),
         nn.LogSoftmax(dim=1)
     )
     model = NeuralNetwork(nn_sequential).to(device)
+    optimizer = torch.optim.Adam(model.parameters())
     plot_data = run_model(train_loader, validate_loader, optimizer, model)
     make_plot(plot_data, 'Model C')
 
@@ -228,6 +232,7 @@ def main():
         nn.LogSoftmax(dim=1)
     )
     model = NeuralNetwork(nn_sequential).to(device)
+    optimizer = torch.optim.Adam(model.parameters())
     plot_data = run_model(train_loader, validate_loader, optimizer, model)
     make_plot(plot_data, 'Model D - Batch Norm before activation')
 
@@ -243,6 +248,7 @@ def main():
         nn.LogSoftmax(dim=1)
     )
     model = NeuralNetwork(nn_sequential).to(device)
+    optimizer = torch.optim.Adam(model.parameters())
     plot_data = run_model(train_loader, validate_loader, optimizer, model)
     make_plot(plot_data, 'Model D - Batch Norm after activation')
 
@@ -262,6 +268,7 @@ def main():
         nn.LogSoftmax(dim=1)
     )
     model = NeuralNetwork(nn_sequential).to(device)
+    optimizer = torch.optim.Adam(model.parameters())
     plot_data = run_model(train_loader, validate_loader, optimizer, model)
     make_plot(plot_data, 'Model E')
 
@@ -281,6 +288,7 @@ def main():
         nn.LogSoftmax(dim=1)
     )
     model = NeuralNetwork(nn_sequential).to(device)
+    optimizer = torch.optim.Adam(model.parameters())
     plot_data = run_model(train_loader, validate_loader, optimizer, model)
     make_plot(plot_data, 'Model F')
 
