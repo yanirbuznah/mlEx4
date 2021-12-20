@@ -204,17 +204,18 @@ def main():
     plot_data = run_model(train_loader, validate_loader, optimizer, model)
     make_plot(plot_data, 'Model B')
 
-    # run model C
     nn_sequential = nn.Sequential(
         nn.Linear(28 * 28, 100),
+        nn.Dropout(0.25),
         nn.ReLU(),
-        nn.Dropout(0.2),
         nn.Linear(100, 50),
+        nn.Dropout(0.25),
         nn.ReLU(),
-        nn.Dropout(0.2),
         nn.Linear(50, 10),
+        nn.Dropout(0.25),
         nn.LogSoftmax(dim=1)
     )
+    # run model C
     model = NeuralNetwork(nn_sequential).to(device)
     optimizer = torch.optim.Adam(model.parameters())
     plot_data = run_model(train_loader, validate_loader, optimizer, model)
