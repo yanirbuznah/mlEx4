@@ -13,14 +13,11 @@ print(f"Using {device} device")
 class NeuralNetwork(nn.Module):
     def __init__(self, model):
         super().__init__()
-        self.flatten = nn.Flatten()
         self.model = model
 
     def forward(self, x):
-        x = self.flatten(x)
-        logits = self.model(x)
-
-        return logits
+        output = self.model(x)
+        return output
 
 
 def train(dataloader, model, loss_fn, optimizer):
@@ -66,21 +63,34 @@ def validate(dataloader, model, loss_fn):
     return validate_loss, correct
 
 
-def data_loader_from_file(train_x,train_y):
+# TODO: Remove test_y
+def data_loader_from_file(train_x, train_y, test_x, test_y):
     train_x = np.loadtxt(train_x, dtype=float)
     train_y = np.loadtxt(train_y, dtype=int)
+
+    train_x_std, train_x_mean = train_x.std(), train_x.mean()
+    train_x = (train_x - train_x_mean) / train_x_std
+
     train_data = TensorDataset(torch.from_numpy(train_x).float(), torch.from_numpy(train_y).type(torch.LongTensor))
-    train_size = int(0.8 * len(train_x))
-    test_size = len(train_x) - train_size
-    train_dataset, validate_dataset = torch.utils.data.random_split(train_data, [train_size, test_size])
+    train_size = int(0.9 * len(train_x))
+    validate_size = len(train_x) - train_size
+
+    test_x = np.loadtxt(test_x, dtype=float)
+    test_x = (test_x - train_x_mean) / train_x_std
+    test_y = np.loadtxt(test_y, dtype=int)
+    test_size = len(test_x)
+    test_data = TensorDataset(torch.from_numpy(test_x).float(), torch.from_numpy(test_y).type(torch.LongTensor))
+    test_loader = DataLoader(test_data, batch_size=64, shuffle=False)
+
+    train_data = TensorDataset(torch.from_numpy(train_x).float(), torch.from_numpy(train_y).type(torch.LongTensor))
+
+    train_dataset, validate_dataset = torch.utils.data.random_split(train_data, [train_size, validate_size])
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=False)
     validate_loader = DataLoader(validate_dataset, batch_size=64, shuffle=False)
-    return train_loader, validate_loader
+    return train_loader, validate_loader, test_loader
 
 
-def run_model(train_loader, validate_loader, optimizer, model):
-    loss_fn = nn.NLLLoss()
-    epochs = 10
+def run_model(train_loader, validate_loader, optimizer, model, epochs=10, loss_fn=nn.NLLLoss()):
     train_losses, train_corrects = [], []
     validate_losses, validate_corrects = [], []
     for t in range(epochs):
@@ -95,64 +105,6 @@ def run_model(train_loader, validate_loader, optimizer, model):
     return {"train_loss": train_losses, "train_acc": train_corrects, "validate_loss": validate_losses,
             "validate_acc": validate_corrects}
 
-
-# def run_model_a(train_loader, validate_loader):
-#     model = NeuralNetworkModel().to(device)
-#     loss_fn = nn.NLLLoss()
-#     optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
-#     epochs = 10
-#     train_losses, train_corrects = [], []
-#     validate_losses, validate_corrects = [], []
-#     for t in range(epochs):
-#         print(f"Epoch {t + 1}\n-------------------------------")
-#         train_loss, train_correct = train(train_loader, model, loss_fn, optimizer)
-#         train_losses.append(train_loss)
-#         train_corrects.append(train_correct)
-#         validate_loss, validate_correct = validate(validate_loader, model, loss_fn)
-#         validate_losses.append(validate_loss)
-#         validate_corrects.append(validate_correct)
-#     print("Done!")
-#     return {"train_loss": train_losses, "train_acc": train_corrects, "validate_loss": validate_losses,
-#             "validate_acc": validate_corrects}
-#
-#
-# def run_model_b(train_loader, validate_loader):
-#     model = NeuralNetworkModel().to(device)
-#     loss_fn = nn.NLLLoss()
-#     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3,betas=(0.9,0.999),eps=1e-8)
-#     epochs = 10
-#     train_losses, train_corrects = [], []
-#     validate_losses, validate_corrects = [], []
-#     for t in range(epochs):
-#         print(f"Epoch {t + 1}\n-------------------------------")
-#         train_loss, train_correct = train(train_loader, model, loss_fn, optimizer)
-#         train_losses.append(train_loss)
-#         train_corrects.append(train_correct)
-#         validate_loss, validate_correct = validate(validate_loader, model, loss_fn)
-#         validate_losses.append(validate_loss)
-#         validate_corrects.append(validate_correct)
-#     print("Done!")
-#     return {"train_loss": train_losses, "train_acc": train_corrects, "validate_loss": validate_losses,
-#             "validate_acc": validate_corrects}
-#
-# def run_model_c(train_loader, validate_loader):
-#     model = NeuralNetworkModel(dropout=True).to(device)
-#     loss_fn = nn.NLLLoss()
-#     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3,betas=(0.9,0.999),eps=1e-8)
-#     epochs = 10
-#     train_losses, train_corrects = [], []
-#     validate_losses, validate_corrects = [], []
-#     for t in range(epochs):
-#         print(f"Epoch {t + 1}\n-------------------------------")
-#         train_loss, train_correct = train(train_loader, model, loss_fn, optimizer)
-#         train_losses.append(train_loss)
-#         train_corrects.append(train_correct)
-#         validate_loss, validate_correct = validate(validate_loader, model, loss_fn)
-#         validate_losses.append(validate_loss)
-#         validate_corrects.append(validate_correct)
-#     print("Done!")
-#     return {"train_loss": train_losses, "train_acc": train_corrects, "validate_loss": validate_losses,
-#             "validate_acc": validate_corrects}
 
 def make_plot(plots_data, plot_title):
     train_loss = plots_data["train_loss"]
@@ -176,126 +128,169 @@ def make_plot(plots_data, plot_title):
     axes[1].plot(train_acc, label="Train")
     axes[1].plot(validate_acc, label="Validate")
     axes[1].legend()
+    plt.savefig(f'{plot_title}.png')
 
-    plt.show()
+
+def best_model(train_loader, validate_loader, test_loader=None):
+    nn_sequential = nn.Sequential(
+        nn.Linear(28 * 28, 256),
+        nn.Dropout(0.1),
+        nn.LeakyReLU(),
+        nn.BatchNorm1d(256),
+        nn.Linear(256, 128),
+        nn.Dropout(0.1),
+        nn.LeakyReLU(),
+        nn.BatchNorm1d(128),
+        nn.Linear(128, 10),
+        nn.Dropout(0.1),
+        nn.LogSoftmax(dim=1)
+    )
+
+    model = NeuralNetwork(nn_sequential).to(device)
+    gain = nn.init.calculate_gain('leaky_relu')
+    # for i, l in enumerate(model.model):
+    #     if isinstance(l, nn.Linear):
+    #         torch.nn.init.xavier_uniform_(l.weight, gain)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, eps=1e-7)
+    plot_data = run_model(train_loader, validate_loader, optimizer, model, epochs=10, loss_fn=nn.NLLLoss())
+    print(optimizer)
+
+    optimizer.param_groups[0]['lr'] = 5e-4
+    plot_data = run_model(train_loader, validate_loader, optimizer, model, epochs=10, loss_fn=nn.NLLLoss())
+    print(optimizer)
+
+    optimizer.param_groups[0]['lr'] = 1e-4
+    plot_data = run_model(train_loader, validate_loader, optimizer, model, epochs=10, loss_fn=nn.NLLLoss())
+    make_plot(plot_data, 'Best Model')
+    print(model)
+    print(optimizer)
 
 
 def main():
     train_x, train_y, test_x, test_y = sys.argv[1:]
-    train_loader, validate_loader = data_loader_from_file(train_x,train_y)
 
-    # run model A
-    nn_sequential = nn.Sequential(
-        nn.Linear(28 * 28, 100),
-        nn.ReLU(),
-        nn.Linear(100, 50),
-        nn.ReLU(),
-        nn.Linear(50, 10),
-        nn.LogSoftmax(dim=1)
-    )
-    model = NeuralNetwork(nn_sequential).to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
-    plot_data = run_model(train_loader, validate_loader, optimizer, model)
-    make_plot(plot_data, 'Model A')
+    train_loader, validate_loader, test_loader = data_loader_from_file(train_x, train_y, test_x, test_y)
+    best_model(train_loader, test_loader)
+    #
+    # # run model A
+    # nn_sequential = nn.Sequential(
+    #     nn.Linear(28 * 28, 100),
+    #     nn.ReLU(),
+    #     nn.Linear(100, 50),
+    #     nn.ReLU(),
+    #     nn.Linear(50, 10),
+    #     nn.LogSoftmax(dim=1)
+    # )
+    # model = NeuralNetwork(nn_sequential).to(device)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+    # plot_data = run_model(train_loader, validate_loader, optimizer, model)
+    # make_plot(plot_data, 'Model A')
+    #
+    # # run model B
+    # nn_sequential = nn.Sequential(
+    #     nn.Linear(28 * 28, 100),
+    #     nn.ReLU(),
+    #     nn.Linear(100, 50),
+    #     nn.ReLU(),
+    #     nn.Linear(50, 10),
+    #     nn.LogSoftmax(dim=1)
+    # )
+    # model = NeuralNetwork(nn_sequential).to(device)
+    # optimizer = torch.optim.Adam(model.parameters())
+    # plot_data = run_model(train_loader, validate_loader, optimizer, model)
+    # make_plot(plot_data, 'Model B')
+    #
+    # nn_sequential = nn.Sequential(
+    #     nn.Linear(28 * 28, 100),
+    #     nn.Dropout(0.25),
+    #     nn.ReLU(),
+    #     nn.Linear(100, 50),
+    #     nn.Dropout(0.25),
+    #     nn.ReLU(),
+    #     nn.Linear(50, 10),
+    #     nn.Dropout(0.25),
+    #     nn.LogSoftmax(dim=1)
+    # )
+    # # run model C
+    # model = NeuralNetwork(nn_sequential).to(device)
+    # optimizer = torch.optim.Adam(model.parameters())
+    # plot_data = run_model(train_loader, validate_loader, optimizer, model)
+    # make_plot(plot_data, 'Model C')
+    #
+    # # run model D (Batch Norm before activation)
+    # nn_sequential = nn.Sequential(
+    #     nn.Linear(28 * 28, 100),
+    #     nn.BatchNorm1d(100),
+    #     nn.ReLU(),
+    #     nn.Linear(100, 50),
+    #     nn.BatchNorm1d(50),
+    #     nn.ReLU(),
+    #     nn.Linear(50, 10),
+    #     nn.LogSoftmax(dim=1)
+    # )
+    # model = NeuralNetwork(nn_sequential).to(device)
+    # optimizer = torch.optim.Adam(model.parameters())
+    # plot_data = run_model(train_loader, validate_loader, optimizer, model)
+    # make_plot(plot_data, 'Model D - Batch Norm before activation')
+    #
+    # # run model D (Batch Norm after activation)
+    # nn_sequential = nn.Sequential(
+    #     nn.Linear(28 * 28, 100),
+    #     nn.ReLU(),
+    #     nn.BatchNorm1d(100),
+    #     nn.Linear(100, 50),
+    #     nn.ReLU(),
+    #     nn.BatchNorm1d(50),
+    #     nn.Linear(50, 10),
+    #     nn.LogSoftmax(dim=1)
+    # )
+    # model = NeuralNetwork(nn_sequential).to(device)
+    # optimizer = torch.optim.Adam(model.parameters())
+    # plot_data = run_model(train_loader, validate_loader, optimizer, model)
+    # make_plot(plot_data, 'Model D - Batch Norm after activation')
+    #
+    # # run model E
+    # nn_sequential = nn.Sequential(
+    #     nn.Linear(28 * 28, 128),
+    #     nn.ReLU(),
+    #     nn.Linear(128, 64),
+    #     nn.ReLU(),
+    #     nn.Linear(64, 10),
+    #     nn.ReLU(),
+    #     nn.Linear(10, 10),
+    #     nn.ReLU(),
+    #     nn.Linear(10, 10),
+    #     nn.ReLU(),
+    #     nn.Linear(10, 10),
+    #     nn.LogSoftmax(dim=1)
+    # )
+    # model = NeuralNetwork(nn_sequential).to(device)
+    # optimizer = torch.optim.Adam(model.parameters())
+    # plot_data = run_model(train_loader, validate_loader, optimizer, model)
+    # make_plot(plot_data, 'Model E')
+    #
+    # # run model F
+    # nn_sequential = nn.Sequential(
+    #     nn.Linear(28 * 28, 128),
+    #     nn.Sigmoid(),
+    #     nn.Linear(128, 64),
+    #     nn.Sigmoid(),
+    #     nn.Linear(64, 10),
+    #     nn.Sigmoid(),
+    #     nn.Linear(10, 10),
+    #     nn.Sigmoid(),
+    #     nn.Linear(10, 10),
+    #     nn.Sigmoid(),
+    #     nn.Linear(10, 10),
+    #     nn.LogSoftmax(dim=1)
+    # )
+    # model = NeuralNetwork(nn_sequential).to(device)
+    # optimizer = torch.optim.Adam(model.parameters())
+    # plot_data = run_model(train_loader, validate_loader, optimizer, model)
+    # make_plot(plot_data, 'Model F')
+    #
 
-    # run model B
-    model = NeuralNetwork(nn_sequential).to(device)
-    optimizer = torch.optim.Adam(model.parameters())
-    plot_data = run_model(train_loader, validate_loader, optimizer, model)
-    make_plot(plot_data, 'Model B')
 
-    nn_sequential = nn.Sequential(
-        nn.Linear(28 * 28, 100),
-        nn.Dropout(0.25),
-        nn.ReLU(),
-        nn.Linear(100, 50),
-        nn.Dropout(0.25),
-        nn.ReLU(),
-        nn.Linear(50, 10),
-        nn.Dropout(0.25),
-        nn.LogSoftmax(dim=1)
-    )
-    # run model C
-    model = NeuralNetwork(nn_sequential).to(device)
-    optimizer = torch.optim.Adam(model.parameters())
-    plot_data = run_model(train_loader, validate_loader, optimizer, model)
-    make_plot(plot_data, 'Model C')
-
-    # run model D (Batch Norm before activation)
-    nn_sequential = nn.Sequential(
-        nn.Linear(28 * 28, 100),
-        nn.BatchNorm1d(100),
-        nn.ReLU(),
-        nn.Linear(100, 50),
-        nn.BatchNorm1d(50),
-        nn.ReLU(),
-        nn.Linear(50, 10),
-        nn.LogSoftmax(dim=1)
-    )
-    model = NeuralNetwork(nn_sequential).to(device)
-    optimizer = torch.optim.Adam(model.parameters())
-    plot_data = run_model(train_loader, validate_loader, optimizer, model)
-    make_plot(plot_data, 'Model D - Batch Norm before activation')
-
-    # run model D (Batch Norm after activation)
-    nn_sequential = nn.Sequential(
-        nn.Linear(28 * 28, 100),
-        nn.ReLU(),
-        nn.BatchNorm1d(100),
-        nn.Linear(100, 50),
-        nn.ReLU(),
-        nn.BatchNorm1d(50),
-        nn.Linear(50, 10),
-        nn.LogSoftmax(dim=1)
-    )
-    model = NeuralNetwork(nn_sequential).to(device)
-    optimizer = torch.optim.Adam(model.parameters())
-    plot_data = run_model(train_loader, validate_loader, optimizer, model)
-    make_plot(plot_data, 'Model D - Batch Norm after activation')
-
-    # run model E
-    nn_sequential = nn.Sequential(
-        nn.Linear(28 * 28, 128),
-        nn.ReLU(),
-        nn.Linear(128, 64),
-        nn.ReLU(),
-        nn.Linear(64, 10),
-        nn.ReLU(),
-        nn.Linear(10, 10),
-        nn.ReLU(),
-        nn.Linear(10, 10),
-        nn.ReLU(),
-        nn.Linear(10, 10),
-        nn.LogSoftmax(dim=1)
-    )
-    model = NeuralNetwork(nn_sequential).to(device)
-    optimizer = torch.optim.Adam(model.parameters())
-    plot_data = run_model(train_loader, validate_loader, optimizer, model)
-    make_plot(plot_data, 'Model E')
-
-    # run model F
-    nn_sequential = nn.Sequential(
-        nn.Linear(28 * 28, 128),
-        nn.Sigmoid(),
-        nn.Linear(128, 64),
-        nn.Sigmoid(),
-        nn.Linear(64, 10),
-        nn.Sigmoid(),
-        nn.Linear(10, 10),
-        nn.Sigmoid(),
-        nn.Linear(10, 10),
-        nn.Sigmoid(),
-        nn.Linear(10, 10),
-        nn.LogSoftmax(dim=1)
-    )
-    model = NeuralNetwork(nn_sequential).to(device)
-    optimizer = torch.optim.Adam(model.parameters())
-    plot_data = run_model(train_loader, validate_loader, optimizer, model)
-    make_plot(plot_data, 'Model F')
-
-
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     main()
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
